@@ -1,0 +1,1887 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anyfast RBAC Permission System Architecture</title>
+<style>
+/* ========== RESET & TOKENS ========== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0a0a0f;
+  --bg-elevated: #12121a;
+  --bg-card: #16161f;
+  --bg-card-hover: #1c1c28;
+  --bg-code: #1a1a26;
+  --border: #2a2a3a;
+  --border-accent: #3d3d55;
+  --text: #e4e4ed;
+  --text-secondary: #9494aa;
+  --text-muted: #66667a;
+  --accent: #7c6aef;
+  --accent-light: #9b8cf7;
+  --accent-glow: rgba(124, 106, 239, 0.15);
+  --accent-glow-strong: rgba(124, 106, 239, 0.3);
+  --green: #34d399;
+  --green-glow: rgba(52, 211, 153, 0.12);
+  --orange: #f59e0b;
+  --orange-glow: rgba(245, 158, 11, 0.12);
+  --red: #f87171;
+  --red-glow: rgba(248, 113, 113, 0.12);
+  --blue: #60a5fa;
+  --blue-glow: rgba(96, 165, 250, 0.12);
+  --cyan: #22d3ee;
+  --cyan-glow: rgba(34, 211, 238, 0.12);
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --font-display: 'Inter', var(--font-sans);
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+  --space-4xl: 96px;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  --duration-fast: 150ms;
+  --duration-normal: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ========== BASE ========== */
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ========== TYPOGRAPHY ========== */
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+h1 { font-size: clamp(2.5rem, 1rem + 5vw, 4.5rem); }
+h2 { font-size: clamp(1.75rem, 1rem + 2.5vw, 2.5rem); }
+h3 { font-size: clamp(1.25rem, 1rem + 1vw, 1.5rem); }
+
+p { max-width: 72ch; }
+
+a {
+  color: var(--accent-light);
+  text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+a:hover { color: #fff; }
+
+code, .mono {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+
+/* ========== LAYOUT ========== */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--space-lg);
+}
+
+section {
+  padding: var(--space-4xl) 0;
+  position: relative;
+}
+
+section + section {
+  border-top: 1px solid var(--border);
+}
+
+/* ========== NAV ========== */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: rgba(10, 10, 15, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+  transition: box-shadow var(--duration-normal) var(--ease-out);
+}
+
+nav.scrolled {
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+}
+
+nav .container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 60px;
+}
+
+.nav-brand {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.nav-brand .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow-strong);
+}
+
+.nav-links {
+  display: flex;
+  gap: var(--space-lg);
+  list-style: none;
+}
+
+.nav-links a {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: color var(--duration-fast);
+  position: relative;
+}
+
+.nav-links a:hover,
+.nav-links a.active {
+  color: var(--text);
+}
+
+.nav-links a.active::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+@media (max-width: 768px) {
+  .nav-links { display: none; }
+}
+
+/* ========== HERO ========== */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  padding-top: 60px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -40%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(ellipse, var(--accent-glow-strong) 0%, transparent 70%);
+  pointer-events: none;
+  animation: pulse 8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(1); }
+  50% { opacity: 0.8; transform: translateX(-50%) scale(1.1); }
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  width: 100%;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 6px 16px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-accent);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-bottom: var(--space-xl);
+  animation: fadeInUp 0.8s var(--ease-out) both;
+}
+
+.hero-badge .pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: blink 2s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.hero h1 {
+  margin-bottom: var(--space-lg);
+  animation: fadeInUp 0.8s var(--ease-out) 0.1s both;
+}
+
+.hero h1 .gradient {
+  background: linear-gradient(135deg, var(--accent-light), var(--cyan), var(--accent-light));
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 6s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.hero-desc {
+  color: var(--text-secondary);
+  font-size: clamp(1rem, 0.8rem + 0.8vw, 1.25rem);
+  max-width: 600px;
+  margin: 0 auto var(--space-2xl);
+  animation: fadeInUp 0.8s var(--ease-out) 0.2s both;
+}
+
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2xl);
+  flex-wrap: wrap;
+  animation: fadeInUp 0.8s var(--ease-out) 0.35s both;
+}
+
+.hero-stat {
+  text-align: center;
+}
+
+.hero-stat .num {
+  font-size: 2.5rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--accent-light);
+  line-height: 1;
+}
+
+.hero-stat .label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ========== SECTION HEADER ========== */
+.section-header {
+  margin-bottom: var(--space-3xl);
+}
+
+.section-num {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: var(--space-sm);
+}
+
+.section-header h2 {
+  margin-bottom: var(--space-md);
+}
+
+.section-header p {
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+}
+
+/* ========== CARDS ========== */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xl);
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-accent);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-lg);
+}
+
+.card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  margin-bottom: var(--space-md);
+}
+
+.card-icon.purple { background: var(--accent-glow); color: var(--accent-light); }
+.card-icon.green { background: var(--green-glow); color: var(--green); }
+.card-icon.orange { background: var(--orange-glow); color: var(--orange); }
+.card-icon.blue { background: var(--blue-glow); color: var(--blue); }
+.card-icon.cyan { background: var(--cyan-glow); color: var(--cyan); }
+.card-icon.red { background: var(--red-glow); color: var(--red); }
+
+.card h3 {
+  margin-bottom: var(--space-sm);
+}
+
+.card p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* ========== THREE LAYERS ========== */
+.layer-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.layer {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xl) var(--space-2xl);
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: var(--space-2xl);
+  align-items: center;
+  transition: all var(--duration-normal) var(--ease-out);
+  position: relative;
+  overflow: hidden;
+}
+
+.layer::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.layer.l-route::before { background: var(--accent); }
+.layer.l-row::before { background: var(--green); }
+.layer.l-field::before { background: var(--orange); }
+
+.layer:hover {
+  border-color: var(--border-accent);
+  transform: translateX(4px);
+}
+
+.layer-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.layer-label .tag {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.layer.l-route .tag { color: var(--accent-light); }
+.layer.l-row .tag { color: var(--green); }
+.layer.l-field .tag { color: var(--orange); }
+
+.layer-label h3 {
+  font-size: 1.25rem;
+}
+
+.layer-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.layer-body .desc {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.layer-body .impl {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-code);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  .layer {
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+  }
+}
+
+/* ========== FLOW DIAGRAM ========== */
+.flow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: var(--space-xl) 0;
+}
+
+.flow-step {
+  width: 100%;
+  max-width: 700px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg) var(--space-xl);
+  position: relative;
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.flow-step:hover {
+  border-color: var(--border-accent);
+  background: var(--bg-card-hover);
+}
+
+.flow-step-num {
+  position: absolute;
+  top: -12px;
+  left: var(--space-xl);
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 12px;
+  border-radius: 9999px;
+}
+
+.flow-step h4 {
+  font-size: 1rem;
+  margin-bottom: var(--space-xs);
+}
+
+.flow-step p {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.flow-step .code-hint {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent-light);
+  margin-top: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--accent-glow);
+  border-radius: var(--radius-sm);
+  display: inline-block;
+}
+
+.flow-arrow {
+  width: 2px;
+  height: 32px;
+  background: var(--border-accent);
+  position: relative;
+}
+
+.flow-arrow::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--border-accent);
+}
+
+/* ========== SCHEMA TABLE ========== */
+.schema-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--space-lg);
+}
+
+.schema-table {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.schema-table:hover {
+  border-color: var(--border-accent);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.schema-table-header {
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg-code);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.schema-table-header .icon {
+  font-size: 0.9rem;
+}
+
+.schema-table-header h4 {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.schema-table-header .badge {
+  margin-left: auto;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-core { background: var(--accent-glow); color: var(--accent-light); }
+.badge-acl { background: var(--green-glow); color: var(--green); }
+.badge-casbin { background: var(--orange-glow); color: var(--orange); }
+.badge-catalog { background: var(--blue-glow); color: var(--blue); }
+
+.schema-table-body {
+  padding: var(--space-sm) 0;
+}
+
+.schema-field {
+  padding: var(--space-xs) var(--space-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 0.8rem;
+  transition: background var(--duration-fast);
+}
+
+.schema-field:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.schema-field .fname {
+  font-family: var(--font-mono);
+  color: var(--text);
+  min-width: 130px;
+}
+
+.schema-field .ftype {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.schema-field .fdesc {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+
+.schema-field .pk {
+  color: var(--orange);
+  font-weight: 600;
+  font-size: 0.65rem;
+}
+
+.schema-field .fk {
+  color: var(--blue);
+  font-weight: 600;
+  font-size: 0.65rem;
+}
+
+.schema-note {
+  padding: var(--space-sm) var(--space-lg);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  font-style: italic;
+}
+
+/* ========== HIERARCHY DIAGRAM ========== */
+.hierarchy-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-2xl);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.hierarchy-row {
+  display: flex;
+  gap: var(--space-xl);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.hierarchy-node {
+  padding: var(--space-sm) var(--space-lg);
+  border: 2px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  position: relative;
+  transition: all var(--duration-normal) var(--ease-out);
+  cursor: default;
+  min-width: 140px;
+}
+
+.hierarchy-node:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.hierarchy-node.root {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  color: var(--accent-light);
+}
+
+.hierarchy-node.system {
+  border-color: var(--green);
+  background: var(--green-glow);
+  color: var(--green);
+}
+
+.hierarchy-node.tenant {
+  border-color: var(--blue);
+  background: var(--blue-glow);
+  color: var(--blue);
+}
+
+.hierarchy-node .node-sub {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-weight: 400;
+  display: block;
+  margin-top: 2px;
+}
+
+.hierarchy-connector {
+  width: 2px;
+  height: 24px;
+  background: var(--border-accent);
+  position: relative;
+}
+
+.hierarchy-branch {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.hierarchy-branch::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--border-accent);
+}
+
+/* ========== TENANT DIAGRAM ========== */
+.tenant-visual {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: var(--space-2xl);
+  padding: var(--space-2xl);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.tenant-source {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.tenant-box {
+  padding: var(--space-md) var(--space-lg);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-md);
+  text-align: center;
+  width: 100%;
+  background: var(--accent-glow);
+}
+
+.tenant-box h4 {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--accent-light);
+}
+
+.tenant-box p {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.tenant-targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-md);
+}
+
+.tenant-target {
+  padding: var(--space-md);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  text-align: center;
+  background: var(--bg-code);
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.tenant-target:hover {
+  border-color: var(--green);
+  background: var(--green-glow);
+}
+
+.tenant-target .t-name {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tenant-target .t-domain {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.tenant-arrow-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+}
+
+.tenant-arrow-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.tenant-arrow-line {
+  flex: 1;
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--accent) 0,
+    var(--accent) 8px,
+    transparent 8px,
+    transparent 14px
+  );
+  position: relative;
+}
+
+.tenant-arrow-line::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid var(--accent);
+}
+
+@media (max-width: 768px) {
+  .tenant-visual {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========== SEED TIMELINE ========== */
+.seed-timeline {
+  position: relative;
+  padding-left: 40px;
+}
+
+.seed-timeline::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border-accent);
+}
+
+.seed-step {
+  position: relative;
+  margin-bottom: var(--space-xl);
+  padding: var(--space-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.seed-step:hover {
+  border-color: var(--border-accent);
+  background: var(--bg-card-hover);
+}
+
+.seed-step::before {
+  content: attr(data-step);
+  position: absolute;
+  left: -33px;
+  top: var(--space-lg);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 24px;
+  text-align: center;
+}
+
+.seed-step h4 {
+  font-size: 0.95rem;
+  margin-bottom: var(--space-xs);
+}
+
+.seed-step p {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.seed-step .seed-fn {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent-light);
+  margin-top: var(--space-sm);
+}
+
+/* ========== FRONTEND SECTION ========== */
+.frontend-flow {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-2xl);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.fe-node {
+  padding: var(--space-lg);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  text-align: center;
+  background: var(--bg-code);
+}
+
+.fe-node h4 {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  margin-bottom: var(--space-xs);
+}
+
+.fe-node p {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.fe-arrow {
+  font-size: 1.2rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+  .frontend-flow {
+    grid-template-columns: 1fr;
+  }
+  .fe-arrow {
+    transform: rotate(90deg);
+    text-align: center;
+  }
+}
+
+/* ========== CODE BLOCK ========== */
+.code-block {
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  overflow-x: auto;
+  margin: var(--space-lg) 0;
+}
+
+.code-block pre {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.8;
+  color: var(--text-secondary);
+}
+
+.code-block .kw { color: var(--accent-light); }
+.code-block .fn { color: var(--cyan); }
+.code-block .str { color: var(--green); }
+.code-block .cm { color: var(--text-muted); font-style: italic; }
+.code-block .op { color: var(--orange); }
+
+/* ========== COMPARISON TABLE ========== */
+.comp-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.comp-table th {
+  background: var(--bg-code);
+  padding: var(--space-md) var(--space-lg);
+  text-align: left;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+}
+
+.comp-table td {
+  padding: var(--space-md) var(--space-lg);
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.comp-table tr:last-child td {
+  border-bottom: none;
+}
+
+.comp-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.comp-table td:first-child {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.comp-table .mono-cell {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+/* ========== SCOPE TYPES ========== */
+.scope-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-md);
+}
+
+.scope-card {
+  padding: var(--space-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  text-align: center;
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.scope-card:hover {
+  border-color: var(--border-accent);
+  transform: translateY(-2px);
+}
+
+.scope-card .scope-icon {
+  font-size: 1.8rem;
+  margin-bottom: var(--space-sm);
+}
+
+.scope-card .scope-name {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: var(--space-xs);
+}
+
+.scope-card .scope-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ========== KEY FILES ========== */
+.file-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-sm);
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  transition: background var(--duration-fast);
+}
+
+.file-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.file-item .file-icon {
+  font-size: 0.75rem;
+  width: 20px;
+  text-align: center;
+}
+
+.file-item .file-path {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.file-item .file-desc {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ========== FOOTER ========== */
+footer {
+  padding: var(--space-2xl) 0;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+footer .footer-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+/* ========== SCROLL ANIMATIONS ========== */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-out);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ========== UTILS ========== */
+.mt-lg { margin-top: var(--space-lg); }
+.mt-xl { margin-top: var(--space-xl); }
+.mt-2xl { margin-top: var(--space-2xl); }
+.mb-lg { margin-bottom: var(--space-lg); }
+.text-accent { color: var(--accent-light); }
+.text-green { color: var(--green); }
+.text-orange { color: var(--orange); }
+.text-blue { color: var(--blue); }
+.text-cyan { color: var(--cyan); }
+.text-muted { color: var(--text-muted); }
+
+/* Google Fonts preconnect handled inline */
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ==================== NAV ==================== -->
+<nav id="nav">
+  <div class="container">
+    <div class="nav-brand">
+      <span class="dot"></span>
+      Anyfast RBAC
+    </div>
+    <ul class="nav-links">
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#three-layers">Three Layers</a></li>
+      <li><a href="#flow">Request Flow</a></li>
+      <li><a href="#schema">Data Model</a></li>
+      <li><a href="#hierarchy">Hierarchy</a></li>
+      <li><a href="#tenant">Multi-Tenant</a></li>
+      <li><a href="#seed">Bootstrap</a></li>
+      <li><a href="#frontend">Frontend</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- ==================== HERO ==================== -->
+<section class="hero" id="overview">
+  <div class="container">
+    <div class="hero-content">
+      <div class="hero-badge">
+        <span class="pulse-dot"></span>
+        Architecture Deep Dive
+      </div>
+      <h1>
+        <span class="gradient">RBAC Permission</span><br>
+        System Architecture
+      </h1>
+      <p class="hero-desc">
+        三层正交的权限控制体系 — 基于 Casbin 引擎，覆盖 API 路由、行级数据、字段级别的完整访问控制
+      </p>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="num">3</div>
+          <div class="label">Permission Layers</div>
+        </div>
+        <div class="hero-stat">
+          <div class="num">5</div>
+          <div class="label">Data Scopes</div>
+        </div>
+        <div class="hero-stat">
+          <div class="num">10+</div>
+          <div class="label">RBAC Tables</div>
+        </div>
+        <div class="hero-stat">
+          <div class="num">4</div>
+          <div class="label">Tuple Casbin</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== THREE LAYERS ==================== -->
+<section id="three-layers">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-num">01 / Core Design</div>
+      <h2>三层正交权限平面</h2>
+      <p>每一层独立控制一个维度，互不干扰，组合起来实现精细化的访问控制。</p>
+    </div>
+
+    <div class="layer-stack">
+      <div class="layer l-route reveal">
+        <div class="layer-label">
+          <span class="tag">Layer 1</span>
+          <h3>API / 路由权限</h3>
+        </div>
+        <div class="layer-body">
+          <div class="desc">控制<strong>角色能否调用此端点</strong> — 通过 Casbin 4-tuple <code>(sub, dom, obj, act)</code> 模型执行</div>
+          <div class="impl">middleware/require_perm.go → RequirePerm("tenant:user:view")</div>
+        </div>
+      </div>
+
+      <div class="layer l-row reveal">
+        <div class="layer-label">
+          <span class="tag">Layer 2</span>
+          <h3>行级数据范围</h3>
+        </div>
+        <div class="layer-body">
+          <div class="desc">控制<strong>角色能看到哪些行</strong> — 通过 BuildDataScope 自动注入 SQL WHERE 条件</div>
+          <div class="impl">service/data_scope.go → BuildDataScope(c, "users") → WHERE agent_id = ?</div>
+        </div>
+      </div>
+
+      <div class="layer l-field reveal">
+        <div class="layer-label">
+          <span class="tag">Layer 3</span>
+          <h3>字段级权限</h3>
+        </div>
+        <div class="layer-body">
+          <div class="desc">控制<strong>每行中哪些字段可见</strong> — 后端反射置零 + 前端列过滤，白名单模式（默认拒绝）</div>
+          <div class="impl">service/field_sanitizer.go → SanitizeResponse(c, "users", items)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== REQUEST FLOW ==================== -->
+<section id="flow">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-num">02 / Request Lifecycle</div>
+      <h2>请求处理完整链路</h2>
+      <p>从 HTTP 请求到达到清洗后的 JSON 响应返回，每个环节自动执行。</p>
+    </div>
+
+    <div class="flow reveal">
+      <div class="flow-step">
+        <div class="flow-step-num">1</div>
+        <h4>UserAuth() 中间件</h4>
+        <p>验证 session / access token，写入 context（id, role, role_id, agent_id）。执行租户边界检查。</p>
+        <span class="code-hint">middleware/auth.go → authHelper()</span>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-step">
+        <div class="flow-step-num">2</div>
+        <h4>RequirePerm() 中间件</h4>
+        <p>提取 userId + agentId，调用 Casbin Enforce。<br>
+          <code>sub="user:123" dom="5" obj="tenant:user" act="view"</code></p>
+        <span class="code-hint">middleware/require_perm.go → service.HasPermission()</span>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-step">
+        <div class="flow-step-num">3</div>
+        <h4>WithResource() 中间件</h4>
+        <p>将 ResourceConfig 注入 gin.Context，启用自动数据范围限定和字段清洗。</p>
+        <span class="code-hint">middleware/resource.go → WithResource("users")</span>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-step">
+        <div class="flow-step-num">4</div>
+        <h4>ScopedList[T]() 查询</h4>
+        <p>自动执行 BuildDataScope → ApplyScope（注入 WHERE） → GORM 分页查询。</p>
+        <span class="code-hint">service/scoped_query.go → ScopedList[model.User](c)</span>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-step">
+        <div class="flow-step-num">5</div>
+        <h4>SanitizeResponse() 清洗</h4>
+        <p>查询 role_field_permissions（30s 缓存），通过反射遍历 struct，denied 字段置零。</p>
+        <span class="code-hint">service/field_sanitizer.go → SanitizeResponse()</span>
+      </div>
+      <div class="flow-arrow"></div>
+
+      <div class="flow-step">
+        <div class="flow-step-num">6</div>
+        <h4>返回清洗后的 JSON</h4>
+        <p>被拒绝的字段已被置零（int→0, string→"", time→zero）。前端配合 useFieldPermColumns 过滤列。</p>
+        <span class="code-hint">common.ApiSuccess(c, pageInfo)</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== DATA MODEL ==================== -->
+<section id="schema">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-num">03 / Data Model</div>
+      <h2>数据库 Schema</h2>
+      <p>所有 RBAC 相关的数据表，分为核心关系表、ACL 控制表、Casbin 策略表和功能目录表。</p>
+    </div>
+
+    <div class="schema-grid reveal">
+      <!-- roles -->
+      <div class="schema-table">
+        <div class="schema-table-header">
+          <span class="icon">🏷️</span>
+          <h4>roles</h4>
+          <span class="badge badge-core">Core</span>
+        </div>
+        <div class="schema-table-body">
+          <div class="schema-field"><span class="fname">id</span><span class="pk">PK</span><span class="ftype">uint</span></div>
+          <div class="schema-field"><span class="fname">agent_id</span><span class="ftype">int</span><span class="fdesc">0=系统, >0=租户</span></div>
+          <div class="schema-field"><span class="fname">code</span><span class="ftype">string</span><span class="fdesc">角色编码</span></div>
+          <div class="schema-field"><span class="fname">name</span><span class="ftype">string</span><span class="fdesc">显示名称</span></div>
+          <div class="schema-field"><span class="fname">parent_id</span><span class="fk">FK→roles</span><span class="fdesc">角色树</span></div>
+          <div class="schema-field"><span class="fname">level</span><span class="ftype">int</span><span class="fdesc">层级深度</span></div>
+          <div class="schema-field"><span class="fname">is_system</span><span class="ftype">bool</span><span class="fdesc">系统内置</span></div>
+        </div>
+        <div class="schema-note">parent_id 仅用于管理权限层级，不做 Casbin 继承</div>
+      </div>
+
+      <!-- user_roles -->
+      <div class="schema-table">
+        <div class="schema-table-header">
+          <span class="icon">🔗</span>
+          <h4>user_roles</h4>
+          <span class="badge badge-core">Core</span>
+        </div>
+        <div class="schema-table-body">
+          <div class="schema-field"><span class="fname">id</span><span class="pk">PK</span><span class="ftype">uint</span></div>
+          <div class="schema-field"><span class="fname">agent_id</span><span class="ftype">int</span><span class="fdesc">租户隔离</span></div>
+          <div class="schema-field"><span class="fname">user_id</span><span class="fk">FK→users</span><span class="ftype">int</span></div>
+          <div class="schema-field"><span class="fname">role_id</span><span class="fk">FK→roles</span><span class="ftype">int</span></div>
+        </div>
+        <div class="schema-note">M:N 映射，写入时同步到 casbin_rule g-policy</div>
+      </div>
+
+      <!-- permissions -->
+      <div class="schema-table">
+        <div class="schema-table-header">
+          <span class="icon">🔑</span>
+          <h4>permissions</h4>
+          <span class="badge badge-core">Core</span>
+        </div>
+        <div class="schema-table-body">
+          <div class="schema-field"><span class="fname">id</span><span class="pk">PK</span><span class="ftype">uint</span></div>
+          <div class="schema-field"><span class="fname">code</span><span class="ftype">string</span><span class="fdesc">e.g. tenant:user:view</span></div>
+          <div class="schema-field"><span class="fname">perm_type</span><span class="ftype">int</span><span class="fdesc">2=menu, 4=API</span></div>
+          <div class="schema-field"><span class="fname">feature_id</span><span class="fk">FK→features</span><span class="ftype">int</span></div>
+          <div class="schema-field"><span class="fname">action</span><span class="ftype">string</span><span class="fdesc">menu/read/create...</span></div>
+          <div class="schema-field"><span class="fname">api_path</span><span class="ftype">string</span><span class="fdesc">路由路径</span></div>
+          <div class="schema-field"><span class="fname">api_method</span><span class="ftype">string</span><span class="fdesc">HTTP 方法</span></div>
+        </div>
+        <div class="schema-note">从 FeatureSeed 的 actions 自动派生</div>
+      </div>
+
+      <!-- role_field_permissions -->
+      <div class="schema-table">
+        <div class="schema-table-header">
+          <span class="icon">🔒</span>
+          <h4>role_field_permissions</h4>
+          <span class="badge badge-acl">Field ACL</span>
+        </div>
+        <div class="schema-table-body">
+          <div class="schema-field"><span class="fname">role_id</span><span class="fk">FK→roles</span><span class="ftype">int</span></div>
+          <div class="schema-field"><span class="fname">resource</span><span class="ftype">string</span><span class="fdesc">e.g. "users"</span></div>
+          <div class="schema-field"><span class="fname">field</span><span class="ftype">string</span><span class="fdesc">字段名</span></div>
+          <div class="schema-field"><span class="fname">field_type</span><span class="ftype">string</span><span class="fdesc">column / json_key</span></div>
+          <div class="schema-field"><span class="fname">allowed</span><span class="ftype">bool</span><span class="fdesc">是否允许</span></div>
+        </div>
+        <div class="schema-note">白名单模式: 未配置 = 拒绝。多角色取并集</div>
+      </div>
+
+      <!-- role_data_scopes -->
+      <div class="schema-table">
+        <div class="schema-table-header">
+          <span class="icon">📊</span>
+          <h4>role_data_scopes</h4>
+          <span class="badge badge-acl">Row ACL</span>
+        </div>
+        <div class="schema-table-body">
+          <div class="schema-field"><span class="fname">role_id</span><span class="fk">FK→roles</span><span class="ftype">int</span></div>
+          <div class="schema-field"><span class="fname">resource</span><span class="ftype">string</span><span class="fdesc">资源名</span></div>
+          <div class="schema-field"><span class="fname">scope_type</span><span class="ftype">string</span><span class="fdesc">5 种范围类型</span></div>
+          <div class="schema-field"><span class="fname">scope_val</span><span class="ftype">string</span><span class="fdesc">自定义值</span></div>
+        </div>
+        <div class="schema-note">多角色取最宽范围</div>
+      </div>
+
+      <!-- casbin_rule -->
+      <div class="schema-table">
+        <div class="schema-table-header">
+          <span class="icon">⚙️</span>
+          <h4>casbin_rule</h4>
+          <span class="badge badge-casbin">Casbin</span>
+        </div>
+        <div class="schema-table-body">
+          <div class="schema-field"><span class="fname">ptype</span><span class="ftype">string</span><span class="fdesc">p 或 g</span></div>
+          <div class="schema-field"><span class="fname">v0</span><span class="ftype">string</span><span class="fdesc">role:admin / user:123</span></div>
+          <div class="schema-field"><span class="fname">v1</span><span class="ftype">string</span><span class="fdesc">agentId / role:admin</span></div>
+          <div class="schema-field"><span class="fname">v2</span><span class="ftype">string</span><span class="fdesc">obj / agentId</span></div>
+          <div class="schema-field"><span class="fname">v3</span><span class="ftype">string</span><span class="fdesc">act</span></div>
+        </div>
+        <div class="schema-note">p-rule: 角色→资源→动作。g-rule: 用户→角色映射</div>
+      </div>
+
+      <!-- permission_features -->
+      <div class="schema-table">
+        <div class="schema-table-header">
+          <span class="icon">📋</span>
+          <h4>permission_features</h4>
+          <span class="badge badge-catalog">Catalog</span>
+        </div>
+        <div class="schema-table-body">
+          <div class="schema-field"><span class="fname">feature_key</span><span class="ftype">string</span><span class="fdesc">功能标识</span></div>
+          <div class="schema-field"><span class="fname">module</span><span class="ftype">string</span><span class="fdesc">所属模块</span></div>
+          <div class="schema-field"><span class="fname">actions</span><span class="ftype">JSON</span><span class="fdesc">["menu","read",...]</span></div>
+          <div class="schema-field"><span class="fname">resources</span><span class="ftype">JSON</span><span class="fdesc">关联资源列表</span></div>
+          <div class="schema-field"><span class="fname">ui_elements</span><span class="ftype">JSON</span><span class="fdesc">UI 元素配置</span></div>
+        </div>
+        <div class="schema-note">功能目录 — 权限 code 从此自动派生</div>
+      </div>
+
+      <!-- role_ui_permissions -->
+      <div class="schema-table">
+        <div class="schema-table-header">
+          <span class="icon">🖥️</span>
+          <h4>role_ui_permissions</h4>
+          <span class="badge badge-acl">UI ACL</span>
+        </div>
+        <div class="schema-table-body">
+          <div class="schema-field"><span class="fname">role_id</span><span class="fk">FK→roles</span><span class="ftype">int</span></div>
+          <div class="schema-field"><span class="fname">feature_key</span><span class="ftype">string</span><span class="fdesc">功能标识</span></div>
+          <div class="schema-field"><span class="fname">ui_config</span><span class="ftype">JSON</span><span class="fdesc">{ key: bool }</span></div>
+        </div>
+        <div class="schema-note">前端 UI 元素（按钮、标签页等）可见性控制</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ROLE HIERARCHY ==================== -->
+<section id="hierarchy">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-num">04 / Role Hierarchy</div>
+      <h2>角色层级与继承</h2>
+      <p>两个层级概念严格分离 — parent_id 组织树与 Casbin 用户-角色映射互不关联。</p>
+    </div>
+
+    <div class="card-grid mb-lg reveal">
+      <div class="card">
+        <div class="card-icon purple">🌳</div>
+        <h3>parent_id 组织树</h3>
+        <p>仅用于管理权限判断（谁能编辑 / 删除谁）。通过 BFS 遍历 + 5 分钟内存缓存。<strong>不参与</strong> Casbin 权限继承。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon green">🔗</div>
+        <h3>Casbin g-policy</h3>
+        <p><code>user → role</code> 直接映射，没有 role → role 继承。<code>EffectivePermCodes == DirectPermCodes</code>（显式禁用角色间继承）。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon orange">🔀</div>
+        <h3>多角色合并策略</h3>
+        <p><strong>字段权限：</strong>并集（任一角色允许 = 允许）<br><strong>数据范围：</strong>取最宽<br><strong>platform:*</strong> 跳过所有限制</p>
+      </div>
+    </div>
+
+    <h3 class="mt-2xl mb-lg reveal">数据范围类型</h3>
+    <div class="scope-grid reveal">
+      <div class="scope-card">
+        <div class="scope-icon">🌍</div>
+        <div class="scope-name">all</div>
+        <div class="scope-desc">看到所有数据<br>无 WHERE 限制</div>
+      </div>
+      <div class="scope-card">
+        <div class="scope-icon">🏢</div>
+        <div class="scope-name">agent</div>
+        <div class="scope-desc">仅本租户数据<br>WHERE agent_id = ?</div>
+      </div>
+      <div class="scope-card">
+        <div class="scope-icon">👥</div>
+        <div class="scope-name">self_and_sub</div>
+        <div class="scope-desc">自己及下属数据<br>WHERE user_id IN (...)</div>
+      </div>
+      <div class="scope-card">
+        <div class="scope-icon">🎯</div>
+        <div class="scope-name">custom</div>
+        <div class="scope-desc">自定义范围条件<br>scope_val 指定</div>
+      </div>
+      <div class="scope-card">
+        <div class="scope-icon">👤</div>
+        <div class="scope-name">self</div>
+        <div class="scope-desc">仅自己的数据<br>WHERE user_id = ?</div>
+      </div>
+    </div>
+
+    <h3 class="mt-2xl mb-lg reveal">权限 Code 派生规则</h3>
+    <div class="code-block reveal">
+      <pre>
+<span class="cm">// 从 FeatureSeed 的 actions 自动派生 permission code</span>
+
+<span class="str">"menu"</span>   action  →  <span class="str">"menu:&lt;featureKey&gt;"</span>          <span class="cm">// e.g. "menu:channel"</span>
+<span class="str">"read"</span>   action  →  <span class="str">"&lt;namespace&gt;:&lt;featureKey&gt;:view"</span>  <span class="cm">// e.g. "tenant:log:view"</span>
+<span class="str">"create"</span> action  →  <span class="str">"&lt;namespace&gt;:&lt;featureKey&gt;:create"</span>
+<span class="str">"update"</span> action  →  <span class="str">"&lt;namespace&gt;:&lt;featureKey&gt;:update"</span>
+<span class="str">"delete"</span> action  →  <span class="str">"&lt;namespace&gt;:&lt;featureKey&gt;:delete"</span>
+
+<span class="cm">// 超级通配符 — Casbin matcher 特殊处理</span>
+<span class="str">"platform:*"</span>  →  <span class="kw">匹配所有 obj + act</span>，跳过字段和数据范围限制</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== MULTI-TENANT ==================== -->
+<section id="tenant">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-num">05 / Multi-Tenant Isolation</div>
+      <h2>多租户隔离</h2>
+      <p>每条 Casbin 策略都带 domain（agentId），天然实现租户隔离。系统角色变更自动扇出到所有租户。</p>
+    </div>
+
+    <div class="tenant-visual reveal">
+      <div class="tenant-source">
+        <div class="tenant-box">
+          <h4>System Roles</h4>
+          <p>agent_id = 0, domain = "0"</p>
+        </div>
+
+        <div class="tenant-arrow-row">
+          <div class="tenant-arrow-label">创建租户时</div>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 4px 8px; background: var(--bg-code); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+          <code>DuplicateSystemRole<br>PoliciesForTenantInTx</code>
+        </div>
+
+        <div class="tenant-arrow-row" style="margin-top: var(--space-md);">
+          <div class="tenant-arrow-label">修改权限时</div>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 4px 8px; background: var(--bg-code); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+          <code>PropagateSystemRole<br>PoliciesInTx (batch=50)</code>
+        </div>
+      </div>
+
+      <div class="tenant-targets">
+        <div class="tenant-target">
+          <div class="t-name">Tenant A</div>
+          <div class="t-domain">domain = "1"</div>
+        </div>
+        <div class="tenant-target">
+          <div class="t-name">Tenant B</div>
+          <div class="t-domain">domain = "2"</div>
+        </div>
+        <div class="tenant-target">
+          <div class="t-name">Tenant C</div>
+          <div class="t-domain">domain = "3"</div>
+        </div>
+        <div class="tenant-target">
+          <div class="t-name">Tenant D</div>
+          <div class="t-domain">domain = "4"</div>
+        </div>
+        <div class="tenant-target">
+          <div class="t-name">Tenant E</div>
+          <div class="t-domain">domain = "5"</div>
+        </div>
+        <div class="tenant-target">
+          <div class="t-name">Tenant ...</div>
+          <div class="t-domain">domain = "N"</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-grid mt-2xl reveal">
+      <div class="card">
+        <div class="card-icon cyan">🔐</div>
+        <h3>Casbin 4-Tuple 模型</h3>
+        <p><code>(sub, dom, obj, act)</code><br>
+          sub=user:id, dom=agentId, obj=资源, act=动作。<br>
+          domain 维度自动实现租户隔离。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon red">🔄</div>
+        <h3>集群安全同步</h3>
+        <p><code>EnsureCasbinSync</code> 使用 Redis SETNX 分布式锁，确保只有一个 Pod 重建 casbin_rule。其余 Pod 等待并 reload。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SEED BOOTSTRAP ==================== -->
+<section id="seed">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-num">06 / Bootstrap</div>
+      <h2>种子数据引导</h2>
+      <p>启动时通过种子数据自动初始化权限系统，确保默认角色和权限就位。</p>
+    </div>
+
+    <div class="seed-timeline reveal">
+      <div class="seed-step" data-step="1">
+        <h4>创建功能目录</h4>
+        <p>从 <code>defaultFeatures</code> 种子数据创建 permission_features 和 permission_modules 记录。</p>
+        <div class="seed-fn">model/permission_seed.go → EnsureDefaultFeatures()</div>
+      </div>
+
+      <div class="seed-step" data-step="2">
+        <h4>派生权限 Code</h4>
+        <p>根据每个 Feature 的 actions 自动派生 permission code（menu:xx, tenant:xx:view 等）。</p>
+        <div class="seed-fn">model/permission_seed.go → EnsureDefaultPermissions()</div>
+      </div>
+
+      <div class="seed-step" data-step="3">
+        <h4>绑定角色权限</h4>
+        <p>通过 <code>rolePermMapping</code> 为每个系统角色分配权限集合，写入 role_permissions 和 casbin_rule。</p>
+        <div class="seed-fn">model/permission_seed.go → rolePermMapping → CasbinSetRolePermissions()</div>
+      </div>
+
+      <div class="seed-step" data-step="4">
+        <h4>设置数据范围</h4>
+        <p>通过 <code>defaultDataScopes</code> 为系统角色配置每个资源的行级数据范围。</p>
+        <div class="seed-fn">model/rbac_scope_seed.go → defaultDataScopes</div>
+      </div>
+
+      <div class="seed-step" data-step="5">
+        <h4>设置字段白名单</h4>
+        <p>通过 <code>defaultFieldPermissions</code> 为系统角色配置每个资源的字段可见性（白名单模式）。</p>
+        <div class="seed-fn">model/rbac_scope_seed.go → EnsureDefaultFieldPermissions()</div>
+      </div>
+
+      <div class="seed-step" data-step="6">
+        <h4>Casbin 集群同步</h4>
+        <p>Redis SETNX 分布式锁确保只有一个 Pod 执行 casbin_rule 重建。其余 Pod 等待后 reload policy。</p>
+        <div class="seed-fn">service/casbin_sync.go → EnsureCasbinSync()</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FRONTEND ==================== -->
+<section id="frontend">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-num">07 / Frontend Integration</div>
+      <h2>前端权限体系</h2>
+      <p>从登录响应到 React 组件渲染，前端自动根据权限过滤表格列和 UI 元素。</p>
+    </div>
+
+    <div class="frontend-flow reveal">
+      <div class="fe-node">
+        <h4>/api/user/self</h4>
+        <p>登录后获取<br>field_permissions</p>
+      </div>
+      <div class="fe-arrow">→</div>
+      <div class="fe-node">
+        <h4>permissionStore</h4>
+        <p>localStorage 存储<br>pub/sub 通知</p>
+      </div>
+      <div class="fe-arrow">→</div>
+      <div class="fe-node">
+        <h4>useFieldPermColumns</h4>
+        <p>过滤 denied 列<br>React useMemo</p>
+      </div>
+    </div>
+
+    <div class="card-grid mt-2xl reveal">
+      <div class="card">
+        <div class="card-icon green">✅</div>
+        <h3>正确用法</h3>
+        <div class="code-block" style="margin: var(--space-md) 0 0;">
+          <pre><span class="cm">// 组件顶层调用 Hook</span>
+<span class="kw">const</span> visibleColumns = <span class="fn">useFieldPermColumns</span>(
+  columns, <span class="str">'users'</span>
+);
+
+<span class="cm">// early return 放在 Hook 后面</span>
+<span class="kw">if</span> (loading) <span class="kw">return</span> &lt;Spin /&gt;;
+
+<span class="kw">return</span> &lt;Table columns={visibleColumns} /&gt;;</pre>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-icon red">❌</div>
+        <h3>错误用法（会白屏）</h3>
+        <div class="code-block" style="margin: var(--space-md) 0 0;">
+          <pre><span class="cm">// 内联 JSX 调用 — Hook 数量不一致 → 白屏</span>
+&lt;Table columns={
+  <span class="fn">useFieldPermColumns</span>(columns, <span class="str">'users'</span>)
+} /&gt;
+
+<span class="cm">// 条件分支中调用 — 同样违反 Hook 规则</span>
+<span class="kw">if</span> (visible) {
+  <span class="kw">const</span> cols = <span class="fn">useFieldPermColumns</span>(...);
+}</pre>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="mt-2xl mb-lg reveal">关键前端文件</h3>
+    <div class="comp-table reveal" style="overflow-x: auto;">
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>文件</th>
+            <th>职责</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono-cell">helpers/permissionStore.js</td>
+            <td>客户端权限存储 — localStorage + pub/sub</td>
+          </tr>
+          <tr>
+            <td class="mono-cell">hooks/common/useFieldPermColumns.js</td>
+            <td>过滤表格列（denied 字段不渲染）</td>
+          </tr>
+          <tr>
+            <td class="mono-cell">hooks/common/useFieldPermCheckboxes.js</td>
+            <td>过滤列选择器复选框</td>
+          </tr>
+          <tr>
+            <td class="mono-cell">hooks/common/usePermissionsVersion.js</td>
+            <td>版本计数器 — 桥接 localStorage → React 响应式</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== KEY FILES ==================== -->
+<section id="files">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-num">08 / Key Files</div>
+      <h2>核心文件索引</h2>
+      <p>按职责分类的关键代码文件，方便快速定位。</p>
+    </div>
+
+    <h3 class="mb-lg reveal">Model 层（数据模型 & 种子）</h3>
+    <div class="file-list reveal">
+      <div class="file-item"><span class="file-icon text-accent">M</span><span class="file-path">model/role.go</span><span class="file-desc">角色 DB 模型</span></div>
+      <div class="file-item"><span class="file-icon text-accent">M</span><span class="file-path">model/permission.go</span><span class="file-desc">权限 DB 模型</span></div>
+      <div class="file-item"><span class="file-icon text-accent">M</span><span class="file-path">model/user_role.go</span><span class="file-desc">用户角色 M:N</span></div>
+      <div class="file-item"><span class="file-icon text-accent">M</span><span class="file-path">model/role_permission.go</span><span class="file-desc">角色权限 M:N</span></div>
+      <div class="file-item"><span class="file-icon text-accent">M</span><span class="file-path">model/role_field_permission.go</span><span class="file-desc">字段级 ACL</span></div>
+      <div class="file-item"><span class="file-icon text-accent">M</span><span class="file-path">model/role_data_scope.go</span><span class="file-desc">行级 ACL</span></div>
+      <div class="file-item"><span class="file-icon text-accent">M</span><span class="file-path">model/role_tree.go</span><span class="file-desc">角色树缓存</span></div>
+      <div class="file-item"><span class="file-icon text-orange">S</span><span class="file-path">model/permission_seed.go</span><span class="file-desc">功能 & 权限种子</span></div>
+      <div class="file-item"><span class="file-icon text-orange">S</span><span class="file-path">model/rbac_scope_seed.go</span><span class="file-desc">范围 & 字段种子</span></div>
+    </div>
+
+    <h3 class="mt-2xl mb-lg reveal">Service 层（业务逻辑）</h3>
+    <div class="file-list reveal">
+      <div class="file-item"><span class="file-icon text-green">S</span><span class="file-path">service/casbin.go</span><span class="file-desc">Casbin 模型定义</span></div>
+      <div class="file-item"><span class="file-icon text-green">S</span><span class="file-path">service/casbin_enforcer.go</span><span class="file-desc">权限缓存 & 查询</span></div>
+      <div class="file-item"><span class="file-icon text-green">S</span><span class="file-path">service/casbin_policy.go</span><span class="file-desc">策略读写</span></div>
+      <div class="file-item"><span class="file-icon text-green">S</span><span class="file-path">service/casbin_tx.go</span><span class="file-desc">事务性策略写入</span></div>
+      <div class="file-item"><span class="file-icon text-green">S</span><span class="file-path">service/casbin_sync.go</span><span class="file-desc">集群同步</span></div>
+      <div class="file-item"><span class="file-icon text-green">S</span><span class="file-path">service/field_permission.go</span><span class="file-desc">字段访问解析</span></div>
+      <div class="file-item"><span class="file-icon text-green">S</span><span class="file-path">service/field_sanitizer.go</span><span class="file-desc">字段清洗</span></div>
+      <div class="file-item"><span class="file-icon text-green">S</span><span class="file-path">service/scoped_query.go</span><span class="file-desc">ScopedList 查询框架</span></div>
+      <div class="file-item"><span class="file-icon text-green">S</span><span class="file-path">service/data_scope.go</span><span class="file-desc">数据范围构建器</span></div>
+      <div class="file-item"><span class="file-icon text-green">S</span><span class="file-path">service/role_hierarchy_service.go</span><span class="file-desc">层级守卫</span></div>
+      <div class="file-item"><span class="file-icon text-green">S</span><span class="file-path">service/user_role_service.go</span><span class="file-desc">角色分配</span></div>
+    </div>
+
+    <h3 class="mt-2xl mb-lg reveal">Middleware 层（中间件）</h3>
+    <div class="file-list reveal">
+      <div class="file-item"><span class="file-icon text-blue">W</span><span class="file-path">middleware/auth.go</span><span class="file-desc">认证网关</span></div>
+      <div class="file-item"><span class="file-icon text-blue">W</span><span class="file-path">middleware/require_perm.go</span><span class="file-desc">权限守卫</span></div>
+      <div class="file-item"><span class="file-icon text-blue">W</span><span class="file-path">middleware/resource.go</span><span class="file-desc">资源绑定</span></div>
+    </div>
+
+    <h3 class="mt-2xl mb-lg reveal">Controller 层</h3>
+    <div class="file-list reveal">
+      <div class="file-item"><span class="file-icon text-cyan">C</span><span class="file-path">controller/permission.go</span><span class="file-desc">RBAC 管理 API</span></div>
+      <div class="file-item"><span class="file-icon text-cyan">C</span><span class="file-path">controller/role.go</span><span class="file-desc">角色 CRUD</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FOOTER ==================== -->
+<footer>
+  <div class="container">
+    <div class="footer-line">
+      <span class="dot" style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;"></span>
+      Anyfast RBAC Architecture &mdash; Generated from codebase analysis
+    </div>
+  </div>
+</footer>
+
+<!-- ==================== JS ==================== -->
+<script>
+// Nav scroll effect
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 20);
+});
+
+// Active nav link
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('.nav-links a');
+
+const observerNav = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navLinks.forEach(link => {
+        link.classList.toggle('active',
+          link.getAttribute('href') === '#' + entry.target.id
+        );
+      });
+    }
+  });
+}, { rootMargin: '-40% 0px -60% 0px' });
+
+sections.forEach(s => observerNav.observe(s));
+
+// Scroll reveal
+const reveals = document.querySelectorAll('.reveal');
+const observerReveal = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+reveals.forEach(el => observerReveal.observe(el));
+</script>
+
+</body>
+</html>
